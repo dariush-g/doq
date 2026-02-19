@@ -1,6 +1,8 @@
 #pragma once
 #include "index.hpp"
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 struct SearchResult {
 	std::string path;
@@ -12,7 +14,7 @@ struct SearchResult {
 class BM25 {
 public:
 	explicit BM25(const std::vector<Document> &docs);
-	std::vector<SearchResult> search(const std::string &query, int top_k = 9);
+	std::vector<SearchResult> search(const std::string &query, int top_k = 20);
 
 private:
 	const std::vector<Document> &docs_;
@@ -20,6 +22,9 @@ private:
 	int total_pages_;
 
 	std::unordered_map<std::string, int> doc_freq_;
+	// term -> list of (doc_index, page_index, term_frequency)
+	std::unordered_map<std::string, std::vector<std::tuple<int, int, int>>>
+		inverted_index_;
 
 	std::vector<std::string> tokenize(const std::string &text);
 	double idf(const std::string &term);

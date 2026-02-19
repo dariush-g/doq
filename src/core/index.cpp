@@ -37,3 +37,34 @@ std::vector<Document> load_index(const std::string &path) {
 
 	return docs;
 }
+
+std::unordered_map<std::string, std::vector<std::tuple<int, int, int>>>
+load_inv_index(const std::string &path) {
+	std::ifstream file(path, std::ios::binary);
+	std::stringstream buf;
+	buf << file.rdbuf();
+	std::string data = buf.str();
+
+	msgpack::object_handle oh = msgpack::unpack(data.data(), data.size());
+	msgpack::object obj = oh.get();
+
+	std::unordered_map<std::string, std::vector<std::tuple<int, int, int>>> inv;
+
+	auto &map = obj.via.map;
+	for (size_t i = 0; i < map.size; i++) {
+		std::string term = map.ptr[i].key.as<std::string>();
+		auto &postings = map.ptr[i].val.via.array;
+
+		std::vector<std::tuple<int, int, int>> entries;
+		for (size_t j = 0; j < postings.size; j++) {
+			auto &entry = postings.ptr[j].via.array;
+			int di = entry.ptr[0].as<int>();
+			int pi = entry.ptr[1].as<int>();
+			int tf = entry.ptr[2].as<int>();
+			entries.emplace_back(di, pi, tf);
+		}
+		inv[term] = std::move(entries);
+	}
+
+	return inv;
+}

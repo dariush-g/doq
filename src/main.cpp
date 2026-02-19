@@ -31,27 +31,28 @@ int main(int argc, char *argv[]) {
 	// }
 
 	int selected = 0;
-	std::cout << "\033[s"; // save cursor position
 	render_search_results(results, selected);
 
-	if (results.size() == 0) {
-		std::cout << "No text results found" << std::endl;
+	if (results.empty()) {
+		std::cout << "No results found\n";
 		return 0;
 	}
 
 	while (true) {
 		int key = read_key();
-		if (key == -1)
+		if (key == -1) {
 			selected = std::max(0, selected - 1);
-		if (key == 1)
+		} else if (key == 1) {
 			selected = std::min((int)results.size() - 1, selected + 1);
-		if (key == '\n')
+		} else if (key == '\n') {
 			break;
-
-		std::cout << "\033[u"; // restore cursor to saved position
+		} else {
+			continue; // ignore unknown keys without redrawing
+		}
+		std::cout << "\033[" << results.size() << "A";
 		render_search_results(results, selected);
 	}
-
+	
 	open_result(results[selected]);
 
 	return 0;

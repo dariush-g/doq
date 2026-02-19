@@ -1,8 +1,6 @@
 #include "relevance.hpp"
 #include <algorithm>
 #include <cmath>
-#include <sstream>
-#include <unordered_map>
 #include <unordered_set>
 
 static const double K1 = 1.5;
@@ -28,17 +26,24 @@ BM25::BM25(const std::vector<Document> &docs) : docs_(docs) {
 	total_pages_ = 0;
 	double total_len = 0;
 
-	for (auto &doc : docs_) {
-		for (auto &page : doc.pages) {
-			auto tokens = tokenize(page.text);
-			total_len += tokens.size();
+	inverted_index_ = load_inv_index("inv_index.bin");
+
+	for (int di = 0; di < (int)docs_.size(); di++) {
+		for (int pi = 0; pi < (int)docs_[di].pages.size(); pi++) {
+			auto tokens = tokenize(docs_[di].pages[pi].text);
+			int page_len = tokens.size();
+			total_len += page_len;
 			total_pages_++;
 
-			// count unique terms per page for doc_freq
+			std::unordered_map<std::string, int> tf;
+			for (auto &t : tokens)
+				tf[t]++;
+
 			std::unordered_set<std::string> seen;
-			for (auto &t : tokens) {
-				if (seen.insert(t).second) {
-					doc_freq_[t]++;
+			for (auto &[term, freq] : tf) {
+				// inverted_index_[term].emplace_back(di, pi, freq);
+				if (seen.insert(term).second) {
+					doc_freq_[term]++;
 				}
 			}
 		}
@@ -54,34 +59,29 @@ double BM25::idf(const std::string &term) {
 
 std::vector<SearchResult> BM25::search(const std::string &query, int top_k) {
 	auto query_terms = tokenize(query);
+
+	// accumulate scores per (doc, page)
+	std::unordered_map<int, std::unordered_map<int, double>> scores;
+
+	for (auto &term : query_terms) {
+		if (!inverted_index_.count(term))
+			continue;
+		double term_idf = idf(term);
+
+		for (auto &[di, pi, tf] : inverted_index_.at(term)) {
+			int page_len = docs_[di].pages[pi].text.size();
+			double numerator = tf * (K1 + 1);
+			double denominator =
+				tf + K1 * (1 - B + B * (page_len / avg_page_len_));
+			scores[di][pi] += term_idf * (numerator / denominator);
+		}
+	}
+
 	std::vector<SearchResult> results;
-
-	for (auto &doc : docs_) {
-		for (auto &page : doc.pages) {
-			auto tokens = tokenize(page.text);
-			int page_len = tokens.size();
-			if (page_len == 0)
-				continue;
-
-			// term frequency map for this page
-			std::unordered_map<std::string, int> tf;
-			for (auto &t : tokens)
-				tf[t]++;
-
-			double score = 0.0;
-			for (auto &term : query_terms) {
-				int f = tf.count(term) ? tf.at(term) : 0;
-				if (f == 0)
-					continue;
-				double numerator = f * (K1 + 1);
-				double denominator =
-					f + K1 * (1 - B + B * (page_len / avg_page_len_));
-				score += idf(term) * (numerator / denominator);
-			}
-
-			if (score > 0) {
-				results.push_back({doc.path, doc.name, page.number, score});
-			}
+	for (auto &[di, page_scores] : scores) {
+		for (auto &[pi, score] : page_scores) {
+			results.push_back({docs_[di].path, docs_[di].name,
+							   docs_[di].pages[pi].number, score});
 		}
 	}
 
