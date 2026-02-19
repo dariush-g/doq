@@ -1,0 +1,9 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Always
+AccessModifierOffset: -4
+BreakBeforeBraces: Attach
+ColumnLimit: 80
+
+# fd -e cpp -e h -e hpp -e cxx -x clang-format -i
