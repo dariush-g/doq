@@ -1,3 +1,4 @@
 .env
 .vscode
 index.bin
+./src/indexer/__pycache__/
