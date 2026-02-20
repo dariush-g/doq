@@ -1,11 +1,22 @@
+#include "core/grouping.hpp"
 #include "core/index.hpp"
 #include "core/relevance.hpp"
 #include "interface/interface.hpp"
+#include <csignal>
 #include <iostream>
 #include <string>
 #include <vector>
 
+void handle_exit(int) {
+	std::cout << "\033[?1049l"; // restore screen
+	std::cout << "\033[?25h";	// show cursor
+	std::exit(0);
+}
+
 int main(int argc, char *argv[]) {
+	std::signal(SIGINT, handle_exit);
+	std::signal(SIGTERM, handle_exit);
+
 	if (argc < 2) {
 		std::cerr << "Usage: doq <queries>\n";
 		return 1;
@@ -24,36 +35,66 @@ int main(int argc, char *argv[]) {
 	std::vector<Document> docs = load_index("index.bin");
 
 	BM25 bm25(docs);
-	auto results = bm25.search(query);
+	const auto results = bm25.search(query);
+	auto grouped_results = group_results(results);
 	// for (auto &r : results) {
 	// 	std::cout << r.name << " p." << r.page << " (score: " << r.score
 	// 			  << ")\n";
 	// }
 
 	int selected = 0;
-	render_search_results(results, selected);
 
 	if (results.empty()) {
 		std::cout << "No results found\n";
 		return 0;
 	}
 
+	// Enter alternate screen
+	std::cout << "\033[?1049h";
+	// std::cout << "\033[?25l";
+	auto page_index = 0;
 	while (true) {
+		std::cout << "\033[H\033[2J"; // move to top-left, clear screen
+		render_search_results(grouped_results, selected);
+
 		int key = read_key();
 		if (key == -1) {
 			selected = std::max(0, selected - 1);
 		} else if (key == 1) {
-			selected = std::min((int)results.size() - 1, selected + 1);
+			selected = std::min((int)grouped_results.size() - 1, selected + 1);
 		} else if (key == '\n') {
-			break;
-		} else {
-			continue; // ignore unknown keys without redrawing
+			while (true) {
+				std::cout << "\033[H\033[2J"; // move to top-left, clear screen
+				render_selected_result(grouped_results, selected, page_index);
+
+				int key = read_key();
+				if (key == -1) {
+					page_index = std::max(0, page_index - 1);
+				} else if (key == 1) {
+					page_index = std::min(
+						(int)grouped_results[selected].second.size() - 1,
+						page_index + 1);
+				} else if (key == 'q') {
+					break;
+				} else if (key == '\n') {
+					std::cout << "\033[?1049l";
+					// show cursor again
+					std::cout << "\033[?25h";
+
+					open_result(grouped_results[selected].second[page_index]);
+
+					return 0;
+				}
+			}
 		}
-		std::cout << "\033[" << results.size() << "A";
-		render_search_results(results, selected);
 	}
-	
-	open_result(results[selected]);
+
+	// Exit alternate screen
+	std::cout << "\033[?1049l";
+	// show cursor again
+	std::cout << "\033[?25h";
+
+	open_result(grouped_results[selected].second[page_index]);
 
 	return 0;
 }

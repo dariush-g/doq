@@ -14,7 +14,7 @@ struct SearchResult {
 class BM25 {
 public:
 	explicit BM25(const std::vector<Document> &docs);
-	std::vector<SearchResult> search(const std::string &query, int top_k = 20);
+	std::vector<SearchResult> search(const std::string &query, int top_k = 100);
 
 private:
 	const std::vector<Document> &docs_;

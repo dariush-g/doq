@@ -30,11 +30,13 @@ int read_key() {
 	return c;
 }
 
-void render_search_results(const std::vector<SearchResult> &results,
-						   int selected) {
+void render_search_results(
+	const std::vector<std::pair<std::string, std::vector<SearchResult>>>
+		&results,
+	int selected) {
 	for (int i = 0; i < (int)results.size(); i++) {
 		std::string name =
-			std::filesystem::path(results[i].name).stem().string();
+			std::filesystem::path(results[i].second[0].name).stem().string();
 		// truncate if still too long
 		if (name.size() > 40)
 			name = name.substr(0, 37) + "...";
@@ -42,7 +44,30 @@ void render_search_results(const std::vector<SearchResult> &results,
 		std::cout << "\033[2K";
 		if (i == selected)
 			std::cout << "\033[7m";
-		std::cout << name << " p." << results[i].page;
+		std::cout << name << std::endl; // " p." << results[i].second[0].page;
+		if (i == selected)
+			std::cout << "\033[0m";
+		std::cout << "\n";
+	}
+	std::cout.flush();
+}
+
+void render_selected_result(
+	const std::vector<std::pair<std::string, std::vector<SearchResult>>>
+		&results,
+	int chosen, int selected) {
+	auto filename = results[chosen].first;
+	auto pages = results[chosen].second;
+
+	for (int i = 0; i < (int)pages.size(); i++) {
+		// truncate if still too long
+		if (filename.size() > 40)
+			filename = filename.substr(0, 37) + "...";
+
+		std::cout << "\033[2K";
+		if (i == selected)
+			std::cout << "\033[7m";
+		std::cout << filename << " p." << pages[i].page;
 		if (i == selected)
 			std::cout << "\033[0m";
 		std::cout << "\n";
@@ -51,7 +76,6 @@ void render_search_results(const std::vector<SearchResult> &results,
 }
 
 #ifdef __APPLE__
-
 void open_result(const SearchResult &result) {
 	// try Skim first for page-level opening
 	std::string skim_cmd = "open -a Skim --args -page " +
@@ -66,5 +90,4 @@ void open_result(const SearchResult &result) {
 		system(cmd.c_str());
 	}
 }
-
 #endif
