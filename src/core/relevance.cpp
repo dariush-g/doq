@@ -1,6 +1,8 @@
 #include "relevance.hpp"
+#include "fuzzy.hpp"
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <unordered_set>
 
 static const double K1 = 1.5;
@@ -58,17 +60,28 @@ double BM25::idf(const std::string &term) {
 }
 
 std::vector<SearchResult> BM25::search(const std::string &query, int top_k) {
-	auto query_terms = tokenize(query);
+	auto tokenized = tokenize(query);
+	auto query_terms = std::vector<std::string>();
+
+	for (auto &q : tokenized) {
+		query_terms.push_back(q);
+
+		// if (inverted_index_.count(q))
+		// 	query_terms.push_back(q);
+		// else
+		// 	query_terms.push_back(best_match(q, inverted_index_));
+	}
 
 	// accumulate scores per (doc, page)
 	std::unordered_map<int, std::unordered_map<int, double>> scores;
 
 	for (auto &term : query_terms) {
-		if (!inverted_index_.count(term))
+		auto it = inverted_index_.find(term);
+		if (it == inverted_index_.end())
 			continue;
 		double term_idf = idf(term);
 
-		for (auto &[di, pi, tf] : inverted_index_.at(term)) {
+		for (auto &[di, pi, tf] : it->second) {
 			int page_len = docs_[di].pages[pi].text.size();
 			double numerator = tf * (K1 + 1);
 			double denominator =

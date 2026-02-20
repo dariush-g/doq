@@ -2,6 +2,7 @@
 #include "core/index.hpp"
 #include "core/relevance.hpp"
 #include "interface/interface.hpp"
+#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <string>
@@ -32,15 +33,45 @@ int main(int argc, char *argv[]) {
 		query.append(q + ' ');
 	}
 
+	auto start = std::chrono::high_resolution_clock::now();
+
 	std::vector<Document> docs = load_index("index.bin");
+
+	auto loaded_index_time = std::chrono::high_resolution_clock::now();
 
 	BM25 bm25(docs);
 	const auto results = bm25.search(query);
+
+	auto found_time = std::chrono::high_resolution_clock::now();
+
 	auto grouped_results = group_results(results);
+
+	auto grouped_time = std::chrono::high_resolution_clock::now();
+
 	// for (auto &r : results) {
 	// 	std::cout << r.name << " p." << r.page << " (score: " << r.score
 	// 			  << ")\n";
 	// }
+
+	std::cout << "Loaded index in "
+			  << std::chrono::duration_cast<std::chrono::milliseconds>(
+					 loaded_index_time - start)
+					 .count()
+			  << "ms" << std::endl;
+
+	std::cout << "Searched in "
+			  << std::chrono::duration_cast<std::chrono::milliseconds>(
+					 found_time - loaded_index_time)
+					 .count()
+			  << "ms" << std::endl;
+
+	std::cout << "Grouped in "
+			  << std::chrono::duration_cast<std::chrono::milliseconds>(
+					 grouped_time - found_time)
+					 .count()
+			  << "ms" << std::endl;
+
+	return 0;
 
 	int selected = 0;
 
