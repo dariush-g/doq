@@ -5,8 +5,14 @@
 #include <chrono>
 #include <csignal>
 #include <iostream>
+#include <msgpack.hpp>
 #include <string>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 #include <vector>
+
+#define SOCKET_PATH "/tmp/doq.sock"
 
 void handle_exit(int) {
 	std::cout << "\033[?1049l"; // restore screen
@@ -33,52 +39,66 @@ int main(int argc, char *argv[]) {
 		query.append(q + ' ');
 	}
 
-	auto start = std::chrono::high_resolution_clock::now();
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
-	std::vector<Document> docs = load_index("index.bin");
+	struct sockaddr_un addr;
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
 
-	auto loaded_index_time = std::chrono::high_resolution_clock::now();
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		std::cerr << "could not connect to doqd — is it running?\n";
+		return 1;
+	}
 
-	BM25 bm25(docs);
-	const auto results = bm25.search(query);
+	// send query
+	write(fd, query.c_str(), query.size());
 
-	auto found_time = std::chrono::high_resolution_clock::now();
+	uint32_t size;
+	read(fd, &size, sizeof(size));
 
-	auto grouped_results = group_results(results);
+	std::string buf(size, '\0');
+	size_t total = 0;
+	while (total < size) {
+		int n = read(fd, buf.data() + total, size - total);
+		if (n <= 0)
+			break;
+		total += n;
+	}
 
-	auto grouped_time = std::chrono::high_resolution_clock::now();
+	close(fd);
+	msgpack::object_handle oh = msgpack::unpack(buf.data(), buf.size());
+	msgpack::object obj = oh.get();
 
-	// for (auto &r : results) {
-	// 	std::cout << r.name << " p." << r.page << " (score: " << r.score
-	// 			  << ")\n";
-	// }
+	std::vector<std::pair<std::string, std::vector<SearchResult>>>
+		grouped_results;
 
-	std::cout << "Loaded index in "
-			  << std::chrono::duration_cast<std::chrono::milliseconds>(
-					 loaded_index_time - start)
-					 .count()
-			  << "ms" << std::endl;
+	auto &outer = obj.via.array;
 
-	std::cout << "Searched in "
-			  << std::chrono::duration_cast<std::chrono::milliseconds>(
-					 found_time - loaded_index_time)
-					 .count()
-			  << "ms" << std::endl;
+	for (size_t i = 0; i < outer.size; i++) {
+		auto &pair = outer.ptr[i].via.array;
+		std::string filename = pair.ptr[0].as<std::string>();
 
-	std::cout << "Grouped in "
-			  << std::chrono::duration_cast<std::chrono::milliseconds>(
-					 grouped_time - found_time)
-					 .count()
-			  << "ms" << std::endl;
+		std::vector<SearchResult> pages;
+		auto &pages_arr = pair.ptr[1].via.array;
+		for (size_t j = 0; j < pages_arr.size; j++) {
+			auto &sr = pages_arr.ptr[j].via.array;
+			SearchResult r;
+			r.path = sr.ptr[0].as<std::string>();
+			r.name = sr.ptr[1].as<std::string>();
+			r.page = sr.ptr[2].as<int>();
+			r.score = sr.ptr[3].as<double>();
+			pages.push_back(r);
+		}
 
-	return 0;
+		grouped_results.push_back({filename, pages});
+	}
 
-	int selected = 0;
-
-	if (results.empty()) {
-		std::cout << "No results found\n";
+	if (grouped_results.empty()) {
+		std::cerr << "No results found\n";
 		return 0;
 	}
+
+	int selected = 0;
 
 	// Enter alternate screen
 	std::cout << "\033[?1049h";

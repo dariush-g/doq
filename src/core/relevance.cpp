@@ -25,33 +25,9 @@ std::vector<std::string> BM25::tokenize(const std::string &text) {
 }
 
 BM25::BM25(const std::vector<Document> &docs) : docs_(docs) {
-	total_pages_ = 0;
-	double total_len = 0;
-
 	inverted_index_ = load_inv_index("inv_index.bin");
-
-	for (int di = 0; di < (int)docs_.size(); di++) {
-		for (int pi = 0; pi < (int)docs_[di].pages.size(); pi++) {
-			auto tokens = tokenize(docs_[di].pages[pi].text);
-			int page_len = tokens.size();
-			total_len += page_len;
-			total_pages_++;
-
-			std::unordered_map<std::string, int> tf;
-			for (auto &t : tokens)
-				tf[t]++;
-
-			std::unordered_set<std::string> seen;
-			for (auto &[term, freq] : tf) {
-				// inverted_index_[term].emplace_back(di, pi, freq);
-				if (seen.insert(term).second) {
-					doc_freq_[term]++;
-				}
-			}
-		}
-	}
-
-	avg_page_len_ = total_pages_ > 0 ? total_len / total_pages_ : 1.0;
+	load_bm25_meta("bm25_meta.bin", doc_freq_, page_lengths_, avg_page_len_,
+				   total_pages_);
 }
 
 double BM25::idf(const std::string &term) {
@@ -64,12 +40,10 @@ std::vector<SearchResult> BM25::search(const std::string &query, int top_k) {
 	auto query_terms = std::vector<std::string>();
 
 	for (auto &q : tokenized) {
-		query_terms.push_back(q);
-
-		// if (inverted_index_.count(q))
-		// 	query_terms.push_back(q);
-		// else
-		// 	query_terms.push_back(best_match(q, inverted_index_));
+		if (inverted_index_.count(q))
+			query_terms.push_back(q);
+		else
+			query_terms.push_back(best_match(q, inverted_index_));
 	}
 
 	// accumulate scores per (doc, page)
@@ -79,10 +53,12 @@ std::vector<SearchResult> BM25::search(const std::string &query, int top_k) {
 		auto it = inverted_index_.find(term);
 		if (it == inverted_index_.end())
 			continue;
+		if ((int)it->second.size() > 5000)
+			continue;
 		double term_idf = idf(term);
 
 		for (auto &[di, pi, tf] : it->second) {
-			int page_len = docs_[di].pages[pi].text.size();
+			int page_len = page_lengths_[di][pi];
 			double numerator = tf * (K1 + 1);
 			double denominator =
 				tf + K1 * (1 - B + B * (page_len / avg_page_len_));
@@ -105,5 +81,6 @@ std::vector<SearchResult> BM25::search(const std::string &query, int top_k) {
 		});
 
 	results.resize(std::min(top_k, (int)results.size()));
+
 	return results;
 }

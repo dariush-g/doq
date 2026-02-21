@@ -21,3 +21,8 @@ std::vector<Document> load_index(const std::string &path);
 
 std::unordered_map<std::string, std::vector<std::tuple<int, int, int>>>
 load_inv_index(const std::string &path);
+
+void load_bm25_meta(
+	const std::string &path, std::unordered_map<std::string, int> &doc_freq,
+	std::unordered_map<int, std::unordered_map<int, int>> &page_lengths,
+	double &avg_page_len, int &total_pages);

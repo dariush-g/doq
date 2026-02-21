@@ -68,3 +68,43 @@ load_inv_index(const std::string &path) {
 
 	return inv;
 }
+
+void load_bm25_meta(
+	const std::string &path, std::unordered_map<std::string, int> &doc_freq,
+	std::unordered_map<int, std::unordered_map<int, int>> &page_lengths,
+	double &avg_page_len, int &total_pages) {
+	std::ifstream file(path, std::ios::binary);
+	std::stringstream buf;
+	buf << file.rdbuf();
+	std::string data = buf.str();
+
+	msgpack::object_handle oh = msgpack::unpack(data.data(), data.size());
+	msgpack::object obj = oh.get();
+
+	auto &map = obj.via.map;
+	for (size_t i = 0; i < map.size; i++) {
+		std::string key = map.ptr[i].key.as<std::string>();
+
+		if (key == "avg_page_len") {
+			avg_page_len = map.ptr[i].val.as<double>();
+		} else if (key == "total_pages") {
+			total_pages = map.ptr[i].val.as<int>();
+		} else if (key == "doc_freq") {
+			auto &df_map = map.ptr[i].val.via.map;
+			for (size_t j = 0; j < df_map.size; j++) {
+				std::string term = df_map.ptr[j].key.as<std::string>();
+				doc_freq[term] = df_map.ptr[j].val.as<int>();
+			}
+		} else if (key == "page_lengths") {
+			auto &pl_map = map.ptr[i].val.via.map;
+			for (size_t j = 0; j < pl_map.size; j++) {
+				int di = pl_map.ptr[j].key.as<int>();
+				auto &inner = pl_map.ptr[j].val.via.map;
+				for (size_t k = 0; k < inner.size; k++) {
+					int pi = inner.ptr[k].key.as<int>();
+					page_lengths[di][pi] = inner.ptr[k].val.as<int>();
+				}
+			}
+		}
+	}
+}

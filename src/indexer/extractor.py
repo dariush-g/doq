@@ -34,7 +34,11 @@ def extract_text(file: dict) -> dict:
         elif ext == '.pdf':
             file['pages'] = extract_pdf(file['path'])
             file['type'] = classify_pdf(file['pages'])
-    
+
+        else:
+            file['pages'] = []
+            file['type'] = 'unsupported'
+
     except Exception as e:
         print(f"Warning: could not extract {file['path']}: {e}")
         file['pages'] = []
