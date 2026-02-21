@@ -1,6 +1,7 @@
 #include "core/grouping.hpp"
 #include "core/index.hpp"
 #include "core/relevance.hpp"
+#include "flags.hpp"
 #include "watcher.hpp"
 #include <iostream>
 #include <msgpack.hpp>
@@ -55,6 +56,9 @@ int main() {
 	while (true) {
 		int client_fd = accept(server_fd, nullptr, nullptr);
 
+		uint32_t flags = 0;
+		read(client_fd, &flags, sizeof(flags));
+
 		char buf[1024];
 		int n = read(client_fd, buf, sizeof(buf) - 1);
 		buf[n] = '\0';
@@ -65,7 +69,7 @@ int main() {
 
 		{
 			std::lock_guard<std::mutex> lock(index_mutex);
-			auto results = bm25.search(query);
+			auto results = bm25.search(query, flags);
 			auto grouped_results = group_results(results);
 
 			pk.pack_array(grouped_results.size());

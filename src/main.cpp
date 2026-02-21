@@ -1,6 +1,7 @@
 #include "core/grouping.hpp"
 #include "core/index.hpp"
 #include "core/relevance.hpp"
+#include "flags.hpp"
 #include "interface/interface.hpp"
 #include <chrono>
 #include <csignal>
@@ -24,6 +25,8 @@ int main(int argc, char *argv[]) {
 	std::signal(SIGINT, handle_exit);
 	std::signal(SIGTERM, handle_exit);
 
+	uint32_t flags = 0;
+
 	if (argc < 2) {
 		std::cerr << "Usage: doq <queries>\n";
 		return 1;
@@ -31,6 +34,23 @@ int main(int argc, char *argv[]) {
 
 	std::vector<std::string> queries;
 	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--no-fuzzy") == 0) {
+			flags |= NO_FUZZY;
+			continue;
+		}
+		if (strcmp(argv[i], "--no-scanned") == 0) {
+			flags |= NO_SCANNED;
+			continue;
+		}
+		if (strcmp(argv[i], "--no-text") == 0) {
+			flags |= NO_TEXT;
+			continue;
+		}
+		if (strcmp(argv[i], "--verbose") == 0) {
+			flags |= ADVANCED;
+			continue;
+		}
+
 		queries.push_back(argv[i]);
 	}
 
@@ -50,7 +70,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	// send query
+	// send flags then query
+	write(fd, &flags, sizeof(flags));
 	write(fd, query.c_str(), query.size());
 
 	uint32_t size;

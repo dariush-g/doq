@@ -2,7 +2,6 @@ import ollama
 import base64
 import fitz
 
-
 def get_document_description(image_b64: str) -> str:
     response = ollama.chat(
         model='llava',
@@ -17,7 +16,6 @@ def get_document_description(image_b64: str) -> str:
 def get_embedding(text: str) -> list[float]:
     response = ollama.embeddings(model='nomic-embed-text', prompt=text)
     return response['embedding']
-
 
 def extract_first_significant_page_image(path: str) -> str | None:
     doc = fitz.open(path)
@@ -43,3 +41,11 @@ def extract_first_significant_page_image(path: str) -> str | None:
             return base64.b64encode(img_bytes).decode('utf-8')
     
     return None
+
+def parse_scanned_document(path: str) -> list[float] | None:
+    first_page_b64 = extract_first_significant_page_image(path)
+    if first_page_b64 is None:
+        return None
+    description = get_document_description(first_page_b64)
+    embedding = get_embedding(description)
+    return embedding

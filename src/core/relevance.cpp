@@ -1,4 +1,5 @@
 #include "relevance.hpp"
+#include "../flags.hpp"
 #include "fuzzy.hpp"
 #include <algorithm>
 #include <cmath>
@@ -35,37 +36,41 @@ double BM25::idf(const std::string &term) {
 	return std::log((total_pages_ - df + 0.5) / (df + 0.5) + 1.0);
 }
 
-std::vector<SearchResult> BM25::search(const std::string &query, int top_k) {
+std::vector<SearchResult> BM25::search(const std::string &query, uint32_t flags,
+									   int top_k) {
 	auto tokenized = tokenize(query);
 	auto query_terms = std::vector<std::string>();
 
 	for (auto &q : tokenized) {
 		if (inverted_index_.count(q))
 			query_terms.push_back(q);
-		else
+		else if (!(flags & NO_FUZZY)) {
 			query_terms.push_back(best_match(q, inverted_index_));
+		}
 	}
 
 	// accumulate scores per (doc, page)
 	std::unordered_map<int, std::unordered_map<int, double>> scores;
 
-	for (auto &term : query_terms) {
-		auto it = inverted_index_.find(term);
-		if (it == inverted_index_.end())
-			continue;
-		if ((int)it->second.size() > 5000)
-			continue;
-		double term_idf = idf(term);
+	if (!(flags & NO_TEXT)) {
+		for (auto &term : query_terms) {
+			auto it = inverted_index_.find(term);
+			if (it == inverted_index_.end())
+				continue;
+			if ((int)it->second.size() > 5000)
+				continue;
+			double term_idf = idf(term);
 
-		for (auto &[di, pi, tf] : it->second) {
-			int page_len = page_lengths_[di][pi];
-			double numerator = tf * (K1 + 1);
-			double denominator =
-				tf + K1 * (1 - B + B * (page_len / avg_page_len_));
-			scores[di][pi] += term_idf * (numerator / denominator);
+			for (auto &[di, pi, tf] : it->second) {
+				int page_len = page_lengths_[di][pi];
+				double numerator = tf * (K1 + 1);
+				double denominator =
+					tf + K1 * (1 - B + B * (page_len / avg_page_len_));
+				scores[di][pi] += term_idf * (numerator / denominator);
+			}
 		}
 	}
-
+	
 	std::vector<SearchResult> results;
 	for (auto &[di, page_scores] : scores) {
 		for (auto &[pi, score] : page_scores) {
